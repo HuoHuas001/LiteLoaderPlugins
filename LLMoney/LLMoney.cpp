@@ -22,7 +22,7 @@ std::string LANGUAGE = "en-us";
 
 double MoneyFee;
 bool initDB();
-void disconnect();
+void disconnectdb();
 
 extern money_t DEF_MONEY;
 
@@ -326,7 +326,7 @@ public:
 void entry() {
 	if (initDB()) {
 		Logger("LLMoney").info("connect success.");
-		disconnect();
+		disconnectdb();
 	}
 	else {
 		return;
