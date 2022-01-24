@@ -4,9 +4,23 @@
 #include <vector>
 #include "Event.h"
 #include <LoggerAPI.h>
+#include <JsonLoader.h>
+#include "../SDK/Header/third-party/Nlohmann/json.hpp"
+using json = nlohmann::json;
 static std::unique_ptr<SQLite::Database> db;
 Logger moneylog("LLMoney");
 money_t DEF_MONEY = 0;
+
+//MySQL
+MYSQL* con;
+MYSQL_RES*res;
+MYSQL_ROW row;
+//database configuartion
+string user = "root";
+string pswd = "123456"; // it must be    changed
+string host = "localhost";
+string table = "hospital";
+unsigned port = 3306;
 
 struct cleanSTMT {
 	SQLite::Statement& get;
@@ -20,29 +34,58 @@ struct cleanSTMT {
 };
 
 void ConvertData();
+bool getFile() {
+	json j;			// 创建 json 对象
+	std::ifstream jfile("plugins\\LLMoney\\mysql.json");
+	if (jfile) {
+		jfile >> j;		// 以文件流形式读取 json 文件
+		host = (string)j["host"];
+		user = (string)j["user"];
+		pswd = (string)j["password"];
+		table = (string)j["table"];
+		port = (int)j["port"];
+		return true;
+	} 
+	return false;
+}
+
+void FreeConnect() {
+	mysql_free_result(res);
+	mysql_close(con);
+}
+
 bool initDB() {
+	getFile();
 	try {
-		db = std::make_unique<SQLite::Database>("plugins\\LLMoney\\economy.db", SQLite::OPEN_CREATE | SQLite::OPEN_READWRITE);
-		db->exec("PRAGMA journal_mode = MEMORY");
-		db->exec("PRAGMA synchronous = NORMAL");
-		db->exec("CREATE TABLE IF NOT EXISTS money ( \
-			XUID  TEXT PRIMARY KEY \
-			UNIQUE \
-			NOT NULL, \
-			Money NUMERIC NOT NULL \
-		) \
-			WITHOUT ROWID; ");
-		db->exec("CREATE TABLE IF NOT EXISTS mtrans ( \
-			tFrom TEXT  NOT NULL, \
-			tTo   TEXT  NOT NULL, \
-			Money NUMERIC  NOT NULL, \
-			Time  NUMERIC NOT NULL \
-			DEFAULT(strftime('%s', 'now')), \
-			Note  TEXT \
-		);");
-		db->exec("CREATE INDEX IF NOT EXISTS idx ON mtrans ( \
-			Time COLLATE BINARY COLLATE BINARY DESC \
-		); ");
+		mysql_library_init(0, NULL, NULL);//初始化MySQL库  
+		con = mysql_init((MYSQL*)0);
+		bool sqlConStatus = mysql_real_connect(con, host.c_str(), user.c_str(), pswd.c_str(), table.c_str(), port, NULL, 0);
+		if (sqlConStatus) {
+			moneylog.info("connect success.");
+			const char* query = "set names \'GBK\'";
+			mysql_real_query(con, query, strlen(query));
+			mysql_query(con, "PRAGMA journal_mode = MEMORY");
+			mysql_query(con,"PRAGMA synchronous = NORMAL");
+			mysql_query(con, ("CREATE TABLE IF NOT EXISTS money(\
+				XUID TEXT NOT NULL,\
+				Money INT NOT NULL\
+				); "));
+			mysql_query(con, "CREATE TABLE IF NOT EXISTS mtrans ( \
+				tFrom TEXT  NOT NULL, \
+				tTo   TEXT  NOT NULL, \
+				Money INT  NOT NULL, \
+				Time  NUMERIC NOT NULL , \
+				Note  TEXT \
+			);");
+			mysql_query(con, "CREATE INDEX IF NOT EXISTS idx ON mtrans ( \
+				Time COLLATE BINARY COLLATE BINARY DESC \
+			); ");
+		}
+		else {
+			moneylog.error("DB err {}", mysql_error(con));
+			return false;
+		}
+		
 	}
 	catch (std::exception const& e) {
 		moneylog.error("DB err {}", e.what());
@@ -54,30 +97,49 @@ bool initDB() {
 
 LLMONEY_API money_t LLMoneyGet(xuid_t xuid) {
 	try {
-		static SQLite::Statement get{ *db,"select Money from money where XUID=?" };
-		get.bindNoCopy(1, xuid);
+		initDB();
+		char queryC[400];
+		sprintf(queryC, "SELECT Money FROM `money` WHERE XUID=%s", xuid.c_str());
+		moneylog.info(queryC);
+		auto rt = mysql_real_query(con, queryC, strlen(queryC));
+		if (rt)
+		{
+			printf("Error making query: %s !!!\n", mysql_error(con));
+			return -1;
+		}
+
+		res = mysql_store_result(con);//将结果保存在res结构体中
+		if (res) {
+			printf("Error making query: %s !!!\n", mysql_error(con));
+			return -1;
+		}
+		else {
+			printf("query success\n");
+		}
 		money_t rv = DEF_MONEY;
 		bool fg = false;
-		while (get.executeStep()) {
-			rv = (money_t)get.getColumn(0).getInt64();
+
+		MYSQL_ROW column = mysql_fetch_row(res);
+		while (column) {
+			rv = (money_t)column[0];
 			fg = true;
 		}
-		get.reset();
-		get.clearBindings();
 		if (!fg) {
-			static SQLite::Statement set{ *db,"insert into money values (?,?)" };
-			set.bindNoCopy(1, xuid);
-			set.bind(2, DEF_MONEY);
-			set.exec();
-			set.reset();
-			set.clearBindings();
+			std::ostringstream os;
+			char queryCs[400];
+			sprintf(queryCs, "INSERT INTO `money`(`XUID`, `Money`) VALUES (%s,%lld)",xuid.c_str(),DEF_MONEY);
+			mysql_query(con, queryCs);
+			return DEF_MONEY;
 		}
+		FreeConnect();
 		return rv;
 	}
 	catch (std::exception const& e) {
 		moneylog.error("DB err {}\n", e.what());
+		FreeConnect();
 		return -1;
 	}
+	
 }
 
 bool isRealTrans = true;

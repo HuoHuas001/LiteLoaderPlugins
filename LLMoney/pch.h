@@ -11,5 +11,7 @@
 
 #include <iostream>
 #include<SQLiteCpp/SQLiteCpp.h>
+#include <WinSock.h> 
+#include "../SDK/Header/third-party/MySQL/mysql.h"
 #include <PlayerInfoAPI.h>
 #endif //PCH_H

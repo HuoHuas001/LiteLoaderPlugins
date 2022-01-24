@@ -4,6 +4,9 @@
 #include "Money.h"
 #include <LLAPI.h>
 
+//导入库
+#pragma comment(lib,"../SDK/Lib/third-party/MySQL/libmysql.lib")
+
 void entry();
 
 BOOL APIENTRY DllMain(HMODULE hModule,
