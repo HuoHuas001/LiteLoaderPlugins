@@ -49,7 +49,7 @@ bool getFile() {
 	return false;
 }
 
-void FreeConnect() {
+void disconnect() {
 	mysql_free_result(res);
 	mysql_close(con);
 }
@@ -61,7 +61,6 @@ bool initDB() {
 		con = mysql_init((MYSQL*)0);
 		bool sqlConStatus = mysql_real_connect(con, host.c_str(), user.c_str(), pswd.c_str(), table.c_str(), port, NULL, 0);
 		if (sqlConStatus) {
-			moneylog.info("connect success.");
 			const char* query = "set names \'GBK\'";
 			mysql_real_query(con, query, strlen(query));
 			mysql_query(con, "PRAGMA journal_mode = MEMORY");
@@ -104,39 +103,35 @@ LLMONEY_API money_t LLMoneyGet(xuid_t xuid) {
 		auto rt = mysql_real_query(con, queryC, strlen(queryC));
 		if (rt)
 		{
-			printf("Error making query: %s !!!\n", mysql_error(con));
+			moneylog.error("DB err {}", mysql_error(con));
 			return -1;
 		}
 
 		res = mysql_store_result(con);//将结果保存在res结构体中
-		if (res) {
-			printf("Error making query: %s !!!\n", mysql_error(con));
+		if (!res) {
+			moneylog.error("DB err {}", mysql_error(con));
 			return -1;
-		}
-		else {
-			printf("query success\n");
 		}
 		money_t rv = DEF_MONEY;
 		bool fg = false;
-
-		MYSQL_ROW column = mysql_fetch_row(res);
-		while (column) {
-			rv = (money_t)column[0];
+		while (auto row = mysql_fetch_row(res)) {
+			rv = (money_t)atoll(row[0]);
 			fg = true;
 		}
+
 		if (!fg) {
 			std::ostringstream os;
 			char queryCs[400];
 			sprintf(queryCs, "INSERT INTO `money`(`XUID`, `Money`) VALUES (%s,%lld)",xuid.c_str(),DEF_MONEY);
 			mysql_query(con, queryCs);
-			return DEF_MONEY;
+			rv = DEF_MONEY;
 		}
-		FreeConnect();
+		mysql_free_result(res);
+		mysql_close(con);
 		return rv;
 	}
 	catch (std::exception const& e) {
 		moneylog.error("DB err {}\n", e.what());
-		FreeConnect();
 		return -1;
 	}
 	
@@ -155,6 +150,8 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 	if (val < 0 || from == to)
 		return false;
 	try {
+		char updateC[400];
+		sprintf(updateC, "UPDATE `money` SET `Money`=%lld WHERE `XUID`=%s");
 		db->exec("begin");
 		static SQLite::Statement set{ *db,"update money set Money=? where XUID=?" };
 		if (from != "") {

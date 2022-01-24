@@ -22,7 +22,7 @@ std::string LANGUAGE = "en-us";
 
 double MoneyFee;
 bool initDB();
-void FreeConnect();
+void disconnect();
 
 extern money_t DEF_MONEY;
 
@@ -324,10 +324,14 @@ public:
 };
 
 void entry() {
-	if (!initDB()) {
+	if (initDB()) {
+		Logger("LLMoney").info("connect success.");
+		disconnect();
+	}
+	else {
 		return;
 	}
-	FreeConnect();
+	
 	Event::RegCmdEvent::subscribe([](const Event::RegCmdEvent& ev) {
 		MoneyCommand::setup(ev.mCommandRegistry);
 		MoneySCommand::setup(ev.mCommandRegistry);
