@@ -149,54 +149,74 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 	if (val < 0 || from == to)
 		return false;
 	try {
-		char updateC[400];
+		char queryCmd[400];
 		if (from != "") {
-			auto fmoney = LLMoneyGet(from);
-			if (fmoney < val) {
+			//比对Money
+			auto fromMoney = LLMoneyGet(from);
+			if (fromMoney < val) {
 				return false;
 			}
-			fmoney -= val;
-			{
-				initDB();
-				sprintf(updateC, "UPDATE `money` SET `Money`=%lld WHERE `XUID`=%s",fmoney,from.c_str());
-				moneylog.info(updateC);
-				mysql_real_query(con, updateC, strlen(updateC));
-				disconnectdb();
+
+			//数据上报
+			fromMoney -= val;
+			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`=%s", fromMoney, from.c_str());
+			if (initDB()) {
+				auto rt = mysql_query(con, queryCmd);
+				if (rt) {
+					moneylog.error("DB err {}", mysql_error(con));
+				}
+				else {
+					res = mysql_store_result(con);
+					mysql_free_result(res);
+					mysql_close(con);
+				}
 			}
 		}
 		if (to != "") {
-			auto tmoney = LLMoneyGet(to);
-			tmoney += val;
-			if (tmoney < 0) {
+			auto toMoney = LLMoneyGet(to);
+			if (toMoney < 0) {
 				return false;
 			}
-			{
-				initDB();
-				sprintf(updateC, "UPDATE `money` SET `Money`=%lld WHERE `XUID`=%s", tmoney, to.c_str());
-				moneylog.info(updateC);
-				mysql_real_query(con, updateC, strlen(updateC));
-				disconnectdb();
+			toMoney += val;
+			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`=%s", toMoney, to.c_str());
+			if (initDB()) {
+				auto rt = mysql_query(con, queryCmd);
+				if (rt) {
+					moneylog.error("DB err {}", mysql_error(con));
+				}
+				else {
+					res = mysql_store_result(con);
+					mysql_free_result(res);
+					mysql_close(con);
+				}
 			}
 		}
-		{
-			initDB();
-			char trans[400];
-			time_t timestamp;
-			sprintf(trans, "insert into mtrans (tFrom,tTo,Money,`Time`,Note) values (%s,%s,%lld,%lld,'%s')", from.c_str(), to.c_str(), val, time(&timestamp), note.c_str());
-			moneylog.info(trans);
-			mysql_real_query(con, trans, strlen(trans));
-			disconnectdb();
+		//上报Note
+		initDB();
+		char trans[400];
+		time_t timestamp;
+		sprintf(trans, "insert into mtrans (tFrom,tTo,Money,`Time`,Note) values (%s,%s,%lld,%lld,'%s')", from.c_str(), to.c_str(), val, time(&timestamp), note.c_str());
+		moneylog.info(trans);
+		if (initDB()) {
+			auto rt = mysql_query(con, trans);
+			if (rt) {
+				moneylog.error("DB err {}", mysql_error(con));
+			}
+			else {
+				res = mysql_store_result(con);
+				mysql_free_result(res);
+				mysql_close(con);
+			}
 		}
-
-
 		if (isRealTrans)
 			CallAfterEvent(LLMoneyEvent::Trans, from, to, val);
 		return true;
 	}
 	catch (std::exception const& e) {
-		moneylog.error("DB err {}\n", e.what());		
+		moneylog.error("DB err {}\n", e.what());
 		return false;
 	}
+
 }
 
 LLMONEY_API bool LLMoneyAdd(xuid_t xuid, money_t money)
