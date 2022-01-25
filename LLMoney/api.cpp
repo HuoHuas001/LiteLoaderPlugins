@@ -159,7 +159,7 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 
 			//数据上报
 			fromMoney -= val;
-			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`=%s", fromMoney, from.c_str());
+			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`='%s'", fromMoney, from.c_str());
 			if (initDB()) {
 				auto rt = mysql_query(con, queryCmd);
 				if (rt) {
@@ -178,7 +178,7 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 				return false;
 			}
 			toMoney += val;
-			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`=%s", toMoney, to.c_str());
+			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`='%s'", toMoney, to.c_str());
 			if (initDB()) {
 				auto rt = mysql_query(con, queryCmd);
 				if (rt) {
@@ -195,7 +195,7 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 		initDB();
 		char trans[400];
 		time_t timestamp;
-		sprintf(trans, "insert into mtrans (tFrom,tTo,Money,`Time`,Note) values (%s,%s,%lld,%lld,'%s')", from.c_str(), to.c_str(), val, time(&timestamp), note.c_str());
+		sprintf(trans, "insert into mtrans (tFrom,tTo,Money,`Time`,Note) values ('%s','%s',%lld,%lld,'%s')", from.c_str(), to.c_str(), val, time(&timestamp), note.c_str());
 		moneylog.info(trans);
 		if (initDB()) {
 			auto rt = mysql_query(con, trans);
