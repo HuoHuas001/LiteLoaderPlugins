@@ -61,7 +61,6 @@ bool initDB() {
 		con = mysql_init((MYSQL*)0);
 		bool sqlConStatus = mysql_real_connect(con, host.c_str(), user.c_str(), pswd.c_str(), table.c_str(), port, NULL, 0);
 		if (sqlConStatus) {
-			moneylog.info("connect success.");
 			const char* query = "set names \'UTF8\'";
 			mysql_real_query(con, query, strlen(query));
 			mysql_query(con, "PRAGMA journal_mode = MEMORY");
@@ -74,7 +73,7 @@ bool initDB() {
 				tFrom TEXT  NOT NULL, \
 				tTo   TEXT  NOT NULL, \
 				Money INT  NOT NULL, \
-				Time  INT NOT NULL , \
+				Time  TIMESTAMP NOT NULL , \
 				Note  TEXT \
 			);");
 			mysql_query(con, "CREATE INDEX IF NOT EXISTS idx ON mtrans ( \
@@ -160,6 +159,7 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 			//数据上报
 			fromMoney -= val;
 			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`='%s'", fromMoney, from.c_str());
+			moneylog.info(queryCmd);
 			if (initDB()) {
 				auto rt = mysql_query(con, queryCmd);
 				if (rt) {
@@ -179,6 +179,7 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 			}
 			toMoney += val;
 			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`='%s'", toMoney, to.c_str());
+			moneylog.info(queryCmd);
 			if (initDB()) {
 				auto rt = mysql_query(con, queryCmd);
 				if (rt) {
@@ -194,8 +195,11 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 		//上报Note
 		initDB();
 		char trans[400];
-		time_t timestamp;
-		sprintf(trans, "insert into mtrans (tFrom,tTo,Money,`Time`,Note) values ('%s','%s',%lld,%lld,'%s')", from.c_str(), to.c_str(), val, time(&timestamp), note.c_str());
+		time_t tt = time(NULL);
+		tm* t = localtime(&tt);
+		char s[100];
+		strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S", t);
+		sprintf(trans, "insert into mtrans (tFrom,tTo,Money,`Time`,Note) values ('%s','%s',%lld,'%s','%s')", from.c_str(), to.c_str(), val, s, note.c_str());
 		moneylog.info(trans);
 		if (initDB()) {
 			auto rt = mysql_query(con, trans);
@@ -274,7 +278,8 @@ LLMONEY_API string LLMoneyGetHist(xuid_t xuid, int timediff)
 		initDB();
 		char query[400];
 		std::ostringstream os;
-		sprintf(query, "select tFrom,tTo,Money,datetime(Time,'unixepoch', 'localtime'),Note from mtrans where strftime('%s','now')-time<%i and (tFrom=%s OR tTo=%s) ORDER BY Time DESC","%s",timediff,xuid.c_str(), xuid.c_str());
+		sprintf(query, "select * from mtrans where date_sub(CURDATE(), INTERVAL %i second) <= DATE(`Time`) and (tFrom = %s OR tTo = %s);",timediff,xuid.c_str(), xuid.c_str());
+		moneylog.info(query);
 		string rv;
 		auto rt = mysql_real_query(con, query, strlen(query));
 		if (rt)
@@ -317,8 +322,10 @@ LLMONEY_API void LLMoneyClearHist(int difftime) {
 	try {
 		initDB();
 		char clear[400];
-		sprintf(clear, "DELETE FROM mtrans WHERE strftime('%s','now')-time>%i","%s",difftime);
-		mysql_query(con,clear);
+		sprintf(clear, "DELETE FROM mtrans WHERE DATE(`Time`) <= date_sub(CURDATE(),INTERVAL %i second)",difftime);
+		moneylog.info(clear);
+		auto rt = mysql_real_query(con, clear, strlen(clear));
+		res = mysql_store_result(con);//将结果保存在res结构体中
 		mysql_free_result(res);
 		mysql_close(con);
 	}
