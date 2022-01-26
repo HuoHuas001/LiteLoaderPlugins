@@ -17,7 +17,7 @@ MYSQL_RES*res;
 MYSQL_ROW row;
 //database configuartion
 string user = "root";
-string pswd = "123456"; // it must be    changed
+string pswd = "123456";
 string host = "localhost";
 string table = "hospital";
 unsigned port = 3306;
@@ -159,7 +159,6 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 			//数据上报
 			fromMoney -= val;
 			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`='%s'", fromMoney, from.c_str());
-			moneylog.info(queryCmd);
 			if (initDB()) {
 				auto rt = mysql_query(con, queryCmd);
 				if (rt) {
@@ -179,7 +178,6 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 			}
 			toMoney += val;
 			sprintf(queryCmd, "UPDATE `money` SET `Money`=%lld WHERE `XUID`='%s'", toMoney, to.c_str());
-			moneylog.info(queryCmd);
 			if (initDB()) {
 				auto rt = mysql_query(con, queryCmd);
 				if (rt) {
@@ -200,7 +198,6 @@ LLMONEY_API bool LLMoneyTrans(xuid_t from, xuid_t to, money_t val, string const&
 		char s[100];
 		strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S", t);
 		sprintf(trans, "insert into mtrans (tFrom,tTo,Money,`Time`,Note) values ('%s','%s',%lld,'%s','%s')", from.c_str(), to.c_str(), val, s, note.c_str());
-		moneylog.info(trans);
 		if (initDB()) {
 			auto rt = mysql_query(con, trans);
 			if (rt) {
@@ -279,7 +276,6 @@ LLMONEY_API string LLMoneyGetHist(xuid_t xuid, int timediff)
 		char query[400];
 		std::ostringstream os;
 		sprintf(query, "select * from mtrans where date_sub(CURDATE(), INTERVAL %i second) <= DATE(`Time`) and (tFrom = %s OR tTo = %s);",timediff,xuid.c_str(), xuid.c_str());
-		moneylog.info(query);
 		string rv;
 		auto rt = mysql_real_query(con, query, strlen(query));
 		if (rt)
@@ -323,7 +319,6 @@ LLMONEY_API void LLMoneyClearHist(int difftime) {
 		initDB();
 		char clear[400];
 		sprintf(clear, "DELETE FROM mtrans WHERE DATE(`Time`) <= date_sub(CURDATE(),INTERVAL %i second)",difftime);
-		moneylog.info(clear);
 		auto rt = mysql_real_query(con, clear, strlen(clear));
 		res = mysql_store_result(con);//将结果保存在res结构体中
 		mysql_free_result(res);
